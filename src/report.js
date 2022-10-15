@@ -1,111 +1,97 @@
-const { getTrips, getDriver, getVehicle } = require("api");
+const { getTrips, getDriver, getVehicle } = require('api');
+
+/**
+ * This function should return the data for drivers in the specified format
+ *
+ * Question 4
+ *
+ * @returns {any} Driver report data
+ */
 
 async function driverReport() {
-  const allTrips = await getTrips();
-  const allDrivers = {};
-  for (let i = 0; i < allTrips.length; i++) {
-    try {
-      let currentDriverID = allTrips[i].driverID;
-      const driver = await getDriver(currentDriverID);
-      allDrivers[currentDriverID] = driver;
-      //creating a new property called vehicle and se it to new array
-      allDrivers[currentDriverID]["vehicle"] = [];
-      if (driver.vehicleID.length > 1) {
-        for (let j = 0; j < driver.vehicleID.length; j++) {
-          const vehicle = await getVehicle(driver.vehicleID[j]);
-          allDrivers[allTrips[i].driverID]["vehicle"].push(vehicle);
+  try{
+    const allTrips = await getTrips()
+    const allDrivers = {};
+    const resultObj={};
+
+    const driverIds = allTrips.map((el) => el.driverID);
+    const uniqueDrivers = [...new Set(driverIds)];
+    const details = uniqueDrivers.map((el) => getDriver(el));
+    const final = await Promise.allSettled(details);
+    // console.log(final);
+    
+    for(let i=0; i<uniqueDrivers.length; i++){
+      if (final[i].status=='fulfilled'){
+        resultObj[uniqueDrivers[i]]={
+          fullName: final[i].value.name,
+          phone: final[i].value.phone,
+          id: uniqueDrivers[i],
+          vehicles: final[i].value.vehicleID.map(vehicleId=> getVehicle(vehicleId)),
+          trips: [],
+          noOfTrips: 0,
+          noOfCashTrips: 0,
+          noOfNonCashTrips:0,
+          totalAmountEarned: 0,
+          totalCashAmount: 0,
+          totalNonCashAmount: 0
         }
-      } else {
-        const vehicle = await getVehicle(driver.vehicleID);
-        allDrivers[currentDriverID]["vehicle"].push(vehicle);
       }
-    } catch (error) {
-      continue;
-    }
-  }
-  const output = [];
-  let userObj = {
-    fullname: "",
-    phone: "",
-    id: "",
-    vehicles: [],
-    noOfTrips: 0,
-    noOfCashTrips: 0,
-    noOfNonCashTrips: 0,
-    trips: [],
-    totalAmountEarned: 0,
-    totalCashAmount: 0,
-    totalNonCashAmount: 0,
-  };
-  let userVehicle = {
-    plate: "",
-    manufacturer: "",
-  };
-  let userTrip = {
-    user: "",
-    created: "",
-    pickup: "",
-    destination: "",
-    billed: 0,
-    isCash: false,
-  };
-  const copyOfUserObj = JSON.parse(JSON.stringify(userObj));
-  const copyOfUserVehicle = JSON.parse(JSON.stringify(userVehicle));
-  const copyOfUserTrip = JSON.parse(JSON.stringify(userTrip));
-  for (const key in allDrivers) {
-    for (let i = 0; i < allTrips.length; i++) {
-      if (key === allTrips[i].driverID) {
-        userObj.totalAmountEarned +=
-          Number(allTrips[i].billedAmount) ||
-          Number(allTrips[i].billedAmount.split(",").join(""));
-        userObj.noOfTrips++;
-        userObj.id = key;
-        userObj.fullname = allDrivers[key].name;
-        userObj.phone = allDrivers[key].phone;
-        if (allTrips[i].isCash === true) {
-          userObj.totalCashAmount +=
-            Number(allTrips[i].billedAmount) ||
-            Number(allTrips[i].billedAmount.split(",").join(""));
-          userObj.noOfCashTrips++;
-        } else {
-          userObj.totalNonCashAmount +=
-            Number(allTrips[i].billedAmount) ||
-            Number(allTrips[i].billedAmount.split(",").join(""));
-          userObj.noOfNonCashTrips++;
+      else{
+        resultObj[uniqueDrivers[i]]= {
+          id: uniqueDrivers[i],
+          trips: [],
+          noOfTrips: 0,
+          noOfCashTrips: 0,
+          noOfNonCashTrips:0,
+          totalAmountEarned: 0,
+          totalCashAmount: 0,
+          totalNonCashAmount: 0
         }
-        userTrip.user = allTrips[i].user.name;
-        userTrip.created = allTrips[i].created;
-        userTrip.pickup = allTrips[i].pickup.address;
-        userTrip.destination = allTrips[i].destination.address;
-        userTrip.isCash = allTrips[i].isCash;
-        userTrip.billed =
-          Number(allTrips[i].billedAmount) ||
-          Number(allTrips[i].billedAmount.split(",").join(""));
-        let currentDriverVehicleArray = allDrivers[key].vehicle;
-        for (let j = 0; j < currentDriverVehicleArray.length; j++) {
-          let currentVehicle = allDrivers[key].vehicle[j];
-          userVehicle.plate = currentVehicle.plate;
-          userVehicle.manufacturer = currentVehicle.manufacturer;
-          if (userObj.vehicles.length < currentDriverVehicleArray.length) {
-            userObj.vehicles.push(userVehicle);
-            userVehicle = JSON.parse(JSON.stringify(copyOfUserVehicle));
-          }
-        }
-        userObj.trips.push(userTrip);
-        userTrip = JSON.parse(JSON.stringify(copyOfUserTrip));
       }
     }
-    userObj.totalAmountEarned = Number(
-      userObj.totalAmountEarned.toFixed(2)
-    );
-    userObj.totalCashAmount = Number(userObj.totalCashAmount.toFixed(2));
-    userObj.totalNonCashAmount = Number(
-      userObj.totalNonCashAmount.toFixed(2)
-    );
-    output.push(userObj);
-    userObj = JSON.parse(JSON.stringify(copyOfUserObj));
+    for(let i=0; i<allTrips.length; i++){
+      let amount= +allTrips[i].billedAmount || +allTrips[i].billedAmount.split(",").join("");
+      let driverId= allTrips[i].driverID;
+      resultObj[driverId].totalAmountEarned+=amount;
+      resultObj[driverId].noOfTrips+=1;
+      let tripsData= {
+        "user": allTrips[i].user.name,
+        "created": allTrips[i].created,
+        "pickup": allTrips[i].pickup.address,
+        "destination": allTrips[i].destination.address,
+        "billed": amount,
+        "isCash": allTrips[i].isCash
+      }
+      resultObj[driverId].trips.push(tripsData)
+   
+      if (allTrips[i].isCash== true){
+        resultObj[driverId].noOfCashTrips+= 1;
+        resultObj[driverId].totalCashAmount+= amount;
+      }
+      else{
+        resultObj[driverId].noOfNonCashTrips+= 1;
+        resultObj[driverId].totalNonCashAmount+= amount;
+      }
+    }
+
+    for (key of Object.keys(resultObj)){
+      let driverVehicles= resultObj[key].vehicles ? await Promise.allSettled(resultObj[key].vehicles): [];
+      driverVehicles.forEach((vehicle, index)=>{
+        if(vehicle.status== 'fulfilled'){
+        resultObj[key].vehicles[index]= {
+          manufacturer: vehicle.value.manufacturer,
+          plate: vehicle.value.plate
+      }}})
+    }
+    let result=[];
+    for (key of Object.keys(resultObj)){
+      result.push(result[key])
+    }
+    return result
   }
-  return output;
+  catch(error){
+    console.log(error)
+  }
 }
 module.exports = driverReport;
 driverReport();
